@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apex-os"
+version = "1.0.0"
+description = "Unified monorepo for the Apex Platform — ApexAMM, Apex_ULL, and DCC"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "AGPL-3.0"}
+authors = [
+    {name = "Ahmed Hassan", email = "ahmed@apexgrowth.systems"}
+]
+keywords = ["apex", "market-making", "ultra-low-latency", "data-center", "fintech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Data Center Infrastructure",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: System :: Distributed Computing",
+]
+
+[project.optional-dependencies]
+apexmm = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pandas>=2.0.0",
+]
+ull = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+]
+dcc = [
+    "psycopg[binary,pool]>=3.2,<4",
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-benchmark>=4.0.0",
+    "hypothesis>=6.82.0",
+    "ruff>=0.1.0",
+    "black>=23.7.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+    "bandit>=1.7.5",
+    "pip-audit>=2.6.0",
+]
+all = [
+    "apex-os[apexmm,ull,dcc,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/ahmedhassan/apex-os"
+Documentation = "https://github.com/ahmedhassan/apex-os/docs"
+Repository = "https://github.com/ahmedhassan/apex-os.git"
+Issues = "https://github.com/ahmedhassan/apex-os/issues"
+
+[tool.setuptools]
+packages = []
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

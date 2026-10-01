@@ -1,0 +1,254 @@
+version: "3.9"
+
+# APEX-OS Docker Compose
+# Orchestrates all three systems: ApexAMM, Apex_ULL, DCC
+
+services:
+  # ==========================================================================
+  # PostgreSQL — DCC primary database
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: apex-os-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apex_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-apex_os}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apex} -d ${POSTGRES_DB:-apex_os}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - apex-net
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Redis — caching and message broker
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: apex-os-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - apex-net
+    restart: unless-stopped
+
+  # ==========================================================================
+  # ApexAMM — Predictive Market Making Kernel
+  # ==========================================================================
+  apexamm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: apex-os/apexmm:latest
+    container_name: apex-os-apexmm
+    command: ["apexmm"]
+    environment:
+      APEX_OS_ENV: ${APEX_OS_ENV:-production}
+      APEX_OS_LOG_LEVEL: ${APEX_OS_LOG_LEVEL:-info}
+      APEXAMM_ALPHA_MODEL_PATH: ${APEXAMM_ALPHA_MODEL_PATH:-/app/apexmm/models}
+      APEXAMM_RISK_LIMITS_PATH: ${APEXAMM_RISK_LIMITS_PATH:-/app/apexmm/config/risk_limits.yaml}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-apex}:${POSTGRES_PASSWORD:-apex_secret}@postgres:5432/${POSTGRES_DB:-apex_os}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - apexamm_data:/app/data
+      - apexamm_logs:/app/logs
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - apex-net
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  # ==========================================================================
+  # Apex_ULL — Ultra-Low Latency Infrastructure
+  # ==========================================================================
+  apexull:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: apex-os/apexull:latest
+    container_name: apex-os-apexull
+    command: ["apexull"]
+    environment:
+      APEX_OS_ENV: ${APEX_OS_ENV:-production}
+      APEX_OS_LOG_LEVEL: ${APEX_OS_LOG_LEVEL:-info}
+      APEX_ULL_FEED_HANDLER_MODE: ${APEX_ULL_FEED_HANDLER_MODE:-simulation}
+      APEX_ULL_RISK_ENGINE_ENABLED: "true"
+      APEX_ULL_METRICS_PORT: "9090"
+    volumes:
+      - apexull_data:/app/data
+      - apexull_logs:/app/logs
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - apex-net
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  # ==========================================================================
+  # DCC — Data Center Commander
+  # ==========================================================================
+  dcc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: apex-os/dcc:latest
+    container_name: apex-os-dcc
+    command: ["dcc"]
+    environment:
+      APEX_OS_ENV: ${APEX_OS_ENV:-production}
+      APEX_OS_LOG_LEVEL: ${APEX_OS_LOG_LEVEL:-info}
+      DCC_API_PORT: "8000"
+      DCC_API_HOST: "0.0.0.0"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-apex}:${POSTGRES_PASSWORD:-apex_secret}@postgres:5432/${POSTGRES_DB:-apex_os}
+      REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    volumes:
+      - dcc_data:/app/data
+      - dcc_logs:/app/logs
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - apex-net
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  # ==========================================================================
+  # OpenTelemetry Collector — Observability
+  # ==========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: apex-os-otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./docker/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+    networks:
+      - apex-net
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Prometheus — Metrics collection
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: apex-os-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - apex-net
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Grafana — Visualization
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: apex-os-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - apex-net
+    restart: unless-stopped
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  apex-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  apexamm_data:
+    driver: local
+  apexamm_logs:
+    driver: local
+  apexull_data:
+    driver: local
+  apexull_logs:
+    driver: local
+  dcc_data:
+    driver: local
+  dcc_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
