@@ -14,6 +14,15 @@ from src.feed.filter import (
     SymbolRule,
     VenueRule,
 )
+from src.feed.compression import (
+    BinaryProtocol,
+    CompressionError,
+    LowLatencyBuffer,
+    TickCompressor,
+    TickDecompressor,
+    compress_batch,
+    decompress_batch,
+)
 
 __all__ = [
     "FeedNormalizer",
@@ -27,4 +36,11 @@ __all__ = [
     "PriceRule",
     "SymbolRule",
     "VenueRule",
+    "BinaryProtocol",
+    "CompressionError",
+    "LowLatencyBuffer",
+    "TickCompressor",
+    "TickDecompressor",
+    "compress_batch",
+    "decompress_batch",
 ]
