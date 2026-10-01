@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "AGPL-3.0"}
 authors = [
-    {name = "Ahmed Hassan", email = "ahmed@apexgrowth.systems"}
+    {name = "Ahmed Hassan", email = "aah@a2zsoc.com"}
 ]
 keywords = ["apex", "market-making", "ultra-low-latency", "data-center", "fintech"]
 classifiers = [
@@ -55,10 +55,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ahmedhassan/apex-os"
-Documentation = "https://github.com/ahmedhassan/apex-os/docs"
-Repository = "https://github.com/ahmedhassan/apex-os.git"
-Issues = "https://github.com/ahmedhassan/apex-os/issues"
+Homepage = "https://github.com/AAH20/apex-os"
+Documentation = "https://github.com/AAH20/apex-os/docs"
+Repository = "https://github.com/AAH20/apex-os.git"
+Issues = "https://github.com/AAH20/apex-os/issues"
 
 [tool.setuptools]
 packages = []
