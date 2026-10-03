@@ -1,0 +1,20 @@
+[flake8]
+max-line-length = 120
+ignore = E501,W503,E203,E402,F401,F841,E741,C901,E731,W605,E722,F811
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    .eggs,
+    *.egg-info,
+    .venv,
+    venv,
+    env,
+    .tox,
+    .pytest_cache,
+    .mypy_cache,
+    node_modules
+max-complexity = 30
+statistics = True
+count = True
