@@ -69,8 +69,11 @@ class TestFIXMessageParsing:
 
     def test_parse_message_bad_checksum_raises(self):
         raw = self._build_raw_msg({"55": "AAPL"})
-        # Corrupt the checksum
-        corrupted = raw[:-4] + b"10=000\x01"
+        # Corrupt the checksum VALUE in place, keeping the frame structurally
+        # valid so the parser reaches checksum validation rather than failing
+        # to parse a malformed field.
+        i = raw.rfind(b"10=")
+        corrupted = raw[: i + 3] + b"000" + raw[i + 6 :]
         with pytest.raises(FIXChecksumError):
             FIXMessage.from_bytes(corrupted)
 
@@ -170,8 +173,8 @@ class TestFIXMessageBuilding:
         body_start = bl_end + 1
         # Body ends at 10=...\x01
         body_end = raw.rfind(b"10=")
-        # Remove trailing \x01 before 10=
-        actual_body_len = body_end - body_start - 1  # -1 for the \x01 before 10=
+        # The \x01 terminating the last body field is part of the body itself.
+        actual_body_len = body_end - body_start
         assert body_len == actual_body_len
 
     def test_build_message_roundtrip(self):
@@ -208,6 +211,8 @@ class TestSequenceNumbers:
 
     def test_send_increments_seq_num(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         msg1 = session.send_message("D", {"55": "AAPL"})
         msg2 = session.send_message("D", {"55": "MSFT"})
         assert msg1.seq_num == 1
@@ -216,6 +221,8 @@ class TestSequenceNumbers:
 
     def test_recv_accepts_expected_seq_num(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.expect_seq_num(1)
         session.receive_message(FIXMessage(msg_type="D", sender_comp_id="T", target_comp_id="S",
                                            seq_num=1, fields={}))
@@ -223,6 +230,8 @@ class TestSequenceNumbers:
 
     def test_recv_detects_gap(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.expect_seq_num(1)
         # Receive seq 3 when expecting 1
         session.receive_message(FIXMessage(msg_type="D", sender_comp_id="T", target_comp_id="S",
@@ -233,6 +242,8 @@ class TestSequenceNumbers:
 
     def test_recv_detects_duplicate(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.expect_seq_num(1)
         session.receive_message(FIXMessage(msg_type="D", sender_comp_id="T", target_comp_id="S",
                                            seq_num=1, fields={}))
@@ -243,6 +254,8 @@ class TestSequenceNumbers:
 
     def test_recv_detects_seq_num_too_low(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.expect_seq_num(5)
         session.receive_message(FIXMessage(msg_type="D", sender_comp_id="T", target_comp_id="S",
                                            seq_num=3, fields={}))
@@ -250,6 +263,8 @@ class TestSequenceNumbers:
 
     def test_seq_num_reset(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.send_message("D", {"55": "AAPL"})
         session.send_message("D", {"55": "MSFT"})
         assert session.next_send_seq_num == 3
@@ -259,6 +274,8 @@ class TestSequenceNumbers:
 
     def test_gap_cleared_after_resend(self):
         session = FIXSession(sender_comp_id="SENDER", target_comp_id="TARGET")
+        session.connect()  # FIX requires logon before send/recv
+        session.logon()
         session.expect_seq_num(1)
         session.receive_message(FIXMessage(msg_type="D", sender_comp_id="T", target_comp_id="S",
                                            seq_num=3, fields={}))

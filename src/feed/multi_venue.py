@@ -32,12 +32,21 @@ class EventValidationError(Exception):
     pass
 
 
-def _validate_string(value: Any, field_name: str, max_len: int = 20) -> str:
-    """Validate a string field."""
+def _validate_string(value: Any, field_name: str, max_len: int = 64) -> str:
+    """Validate a string field.
+
+    Rejects non-strings, empty/whitespace-only values, values with leading or
+    trailing whitespace, and control characters. ``max_len`` is deliberately
+    generous (64) so legitimate long instrument identifiers are not rejected.
+    """
     if not isinstance(value, str):
         raise EventValidationError(f"{field_name} must be a string, got {type(value).__name__}")
     if not value or not value.strip():
         raise EventValidationError(f"{field_name} cannot be empty or whitespace-only")
+    # Reject whitespace anywhere, not just padding: a symbol like " BTCUSDT" or
+    # "BTC  USDT" is malformed and would never match a real instrument downstream.
+    if any(ch.isspace() for ch in value):
+        raise EventValidationError(f"{field_name} contains whitespace")
     # Check for control characters
     for ch in value:
         if ord(ch) < 32 or ord(ch) == 127:
@@ -192,7 +201,12 @@ class RingBuffer:
     def __init__(self, capacity: int = 1024):
         if capacity <= 0:
             raise ValueError("capacity must be positive")
-        # Round up to next power of 2
+        # Logical limit is exactly what the caller asked for; the backing store is
+        # rounded up to a power of two so the head/tail advance uses a bitmask.
+        # Keeping them separate means `maxlen` reports 100 for capacity=100 (while
+        # `capacity` reports the 128-slot backing store) and overflow happens at the
+        # requested size, not at the padded one.
+        self._maxlen = capacity
         self._capacity = 1
         while self._capacity < capacity:
             self._capacity <<= 1
@@ -208,7 +222,7 @@ class RingBuffer:
 
     @property
     def maxlen(self) -> int:
-        return self._capacity
+        return self._maxlen
 
     @property
     def size(self) -> int:
@@ -224,7 +238,7 @@ class RingBuffer:
         return self._size == 0
 
     def is_full(self) -> bool:
-        return self._size == self._capacity
+        return self._size >= self._maxlen
 
     def push(self, event: MarketDataEvent) -> None:
         """Push event into buffer. Overwrites oldest if full."""
@@ -233,7 +247,7 @@ class RingBuffer:
         with self._lock:
             self._buffer[self._head] = event
             self._head = (self._head + 1) & (self._capacity - 1)
-            if self._size < self._capacity:
+            if self._size < self._maxlen:
                 self._size += 1
             else:
                 # Overwrite: advance tail

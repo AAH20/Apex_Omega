@@ -330,26 +330,27 @@ class TestRiskCheckPipeline(unittest.TestCase):
             )
         )
 
-        # First order: 30 units at 50k = 1.5M exposure — should pass
+        # First order: 30 units at 35k = 1.05M exposure — should pass
         decision1 = limit_enforcer.check_order(
             symbol="BTC-USD",
             venue="binance",
             account="acct-1",
             quantity=30.0,
-            price=50_000.0,
+            price=35_000.0,
         )
         self.assertEqual(decision1.action, EnforcementAction.PASS)
 
         # Update position tracker
-        limit_enforcer.update_position("BTC-USD", "binance", "acct-1", 30.0, 50_000.0)
+        limit_enforcer.update_position("BTC-USD", "binance", "acct-1", 30.0, 35_000.0)
 
-        # Second order: another 30 units — projected 60 > 50 max — should block
+        # Second order: 25 more units — projected 55 > 50 max (110%) — block band,
+        # below the 120% halt threshold — should block
         decision2 = limit_enforcer.check_order(
             symbol="BTC-USD",
             venue="binance",
             account="acct-1",
-            quantity=30.0,
-            price=50_000.0,
+            quantity=25.0,
+            price=35_000.0,
         )
         self.assertEqual(decision2.action, EnforcementAction.BLOCK)
 
@@ -531,10 +532,13 @@ class TestMarketDataToExecution(unittest.TestCase):
         normalizer = FeedNormalizer()
 
         # Raw ticks from different venues
+        # Timestamps must be fresh: the aggregator filters quotes older than its
+        # staleness window, so fixed historical epochs would yield no quotes.
+        _now = time.time()
         raw_ticks = [
-            {"symbol": "BTC-USD", "price": 50_000.0, "size": 1.0, "side": "buy", "timestamp": 1_700_000_000},
-            {"sym": "BTC-USD", "px": 50_010.0, "sz": 2.0, "sd": "sell", "ts": 1_700_000_001},
-            {"ticker": "BTC-USD", "last": 49_990.0, "volume": 1.5, "side": "buy", "epoch_ms": 1_700_000_002_000},
+            {"symbol": "BTC-USD", "price": 50_000.0, "size": 1.0, "side": "buy", "timestamp": _now},
+            {"sym": "BTC-USD", "px": 50_010.0, "sz": 2.0, "sd": "sell", "ts": _now + 1},
+            {"ticker": "BTC-USD", "last": 49_990.0, "volume": 1.5, "side": "buy", "epoch_ms": (_now + 2) * 1000},
         ]
 
         # Normalize
@@ -582,12 +586,12 @@ class TestPositionLimitEnforcement(unittest.TestCase):
         # Set tighter limit for BTC-USD
         enforcer.set_symbol_limit("BTC-USD", PositionLimit(max_position=10.0))
 
-        # BTC-USD order within default but over symbol limit
+        # BTC-USD order over the 10-unit symbol limit (11/10 = 110%) — block band
         decision = enforcer.check_order(
             symbol="BTC-USD",
             venue="binance",
             account="acct-1",
-            quantity=15.0,
+            quantity=11.0,
             price=50_000.0,
         )
         self.assertEqual(decision.action, EnforcementAction.BLOCK)
@@ -613,12 +617,12 @@ class TestPositionLimitEnforcement(unittest.TestCase):
         # Update position at binance
         enforcer.update_position("BTC-USD", "binance", "acct-1", 15.0, 50_000.0)
 
-        # Another order at binance — projected 25 > 20
+        # Another order at binance — projected 21 > 20 (105%) — block band
         decision = enforcer.check_order(
             symbol="ETH-USD",
             venue="binance",
             account="acct-1",
-            quantity=10.0,
+            quantity=6.0,
             price=3_000.0,
         )
         self.assertEqual(decision.action, EnforcementAction.BLOCK)
@@ -798,11 +802,13 @@ class TestFeedToTradingPipeline(unittest.TestCase):
         aggregator = VenueMarketDataAggregator()
 
         # Simulate raw feeds with price discrepancy
+        # Fresh timestamps — the aggregator drops stale quotes (see above).
+        _now = time.time()
         raw_feeds = [
             # Binance: BTC at 50,000
-            {"symbol": "BTC-USD", "p": 50_000.0, "q": 5.0, "S": "buy", "T": 1_700_000_000},
+            {"symbol": "BTC-USD", "p": 50_000.0, "q": 5.0, "S": "buy", "T": _now},
             # Coinbase: BTC at 50,100 — 100 higher
-            {"product_id": "BTC-USD", "price": 50_100.0, "size": 3.0, "side": "sell", "time": 1_700_000_001},
+            {"product_id": "BTC-USD", "price": 50_100.0, "size": 3.0, "side": "sell", "time": _now + 1},
         ]
 
         normalized = normalizer.normalize_batch(raw_feeds)
@@ -1041,7 +1047,10 @@ class TestCompleteTradingDay(unittest.TestCase):
         # Morning: Add liquidity to order book
         book.add_order(_make_order("sell-btc-1", Side.SELL, 50_100.0, 5, timestamp=1))
         book.add_order(_make_order("sell-btc-2", Side.SELL, 50_200.0, 3, timestamp=2))
-        book.add_order(_make_order("sell-eth-1", Side.SELL, 3_050.0, 20, timestamp=3))
+        # OrderBook matches on price alone (Order carries no instrument), so each
+        # instrument needs its own book — otherwise a BTC buy consumes ETH liquidity.
+        eth_book = OrderBook()
+        eth_book.add_order(_make_order("sell-eth-1", Side.SELL, 3_050.0, 20, timestamp=3))
 
         # Morning: Execute buy orders
         # BTC buy
@@ -1088,7 +1097,7 @@ class TestCompleteTradingDay(unittest.TestCase):
         self.assertTrue(result.passed)
 
         buy_eth = _make_order("buy-eth-1", Side.BUY, 3_050.0, 20, timestamp=5)
-        trades = book.add_order(buy_eth)
+        trades = eth_book.add_order(buy_eth)
         self.assertEqual(len(trades), 1)
 
         for trade in trades:

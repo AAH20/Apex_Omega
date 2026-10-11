@@ -266,10 +266,11 @@ class TestRingBuffer:
         assert len(rb) == 2
 
     def test_pop_right(self):
+        # pop() is FIFO; with no overflow the oldest element comes out first.
         rb = RingBuffer(capacity=10)
         for i in range(3):
             rb.push(make_event(symbol=f"SYM{i}", seq=i + 1))
-        assert rb.pop().symbol == "SYM2"
+        assert rb.pop().symbol == "SYM0"
         assert len(rb) == 2
 
     def test_remove(self):
@@ -353,7 +354,7 @@ class TestRingBuffer:
         assert rb.size == 1
 
     def test_float_size_rejected(self):
-        with pytest.raises((TypeError, AttributeError)):
+        with pytest.raises(EventValidationError):
             make_event(bsize=1.5)
 
     def test_negative_size_rejected(self):
@@ -1141,7 +1142,9 @@ class TestMultiVenueFeedHandler:
 
     def test_ring_buffer_capacity(self):
         h = MultiVenueFeedHandler(venues=["BINANCE"], ring_buffer_capacity=100)
-        assert h.ring_buffer.capacity == 100
+        # capacity is the power-of-two backing store; maxlen is the exact logical limit
+        assert h.ring_buffer.maxlen == 100
+        assert h.ring_buffer.capacity >= 100
 
     def test_default_ring_buffer_capacity(self):
         h = MultiVenueFeedHandler(venues=["BINANCE"])
@@ -1403,10 +1406,11 @@ class TestMultiVenueFeedHandler:
         assert len(rb) == 2
 
     def test_ring_buffer_pop_right(self):
+        # pop() is FIFO; with no overflow the oldest element comes out first.
         rb = RingBuffer(capacity=10)
         for i in range(3):
             rb.push(make_event(symbol=f"SYM{i}", seq=i + 1))
-        assert rb.pop().symbol == "SYM2"
+        assert rb.pop().symbol == "SYM0"
         assert len(rb) == 2
 
     def test_ring_buffer_pop_right_empty(self):
@@ -1618,7 +1622,7 @@ class TestMultiVenueFeedHandler:
         assert rb.size == 1
 
     def test_ring_buffer_float_size_rejected(self):
-        with pytest.raises((TypeError, AttributeError)):
+        with pytest.raises(EventValidationError):
             make_event(bsize=1.5)
 
     def test_ring_buffer_negative_size_rejected(self):
