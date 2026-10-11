@@ -528,7 +528,7 @@ flowchart LR
 
     subgraph CI["Continuous Integration"]
         BUILD[Build]
-        TEST[Run Tests\n2,251 tests]
+        TEST[Run Tests\n2,065 tests]
         LINT[Lint & Static Analysis]
         SCAN[Security Scan]
     end
@@ -653,25 +653,28 @@ flowchart TD
 
 ## Tests
 
-**2,251 tests** across **48 files** in **12 topics**, TDD-enforced.
+**2,065 tests** across **40 files**, TDD-enforced.
 
 ### Test Coverage by Module
 
-| Module | Tests | Files | Coverage |
-|--------|-------|-------|----------|
-| FIX Protocol | 312 | 12 | 94% |
-| Order Book | 287 | 10 | 96% |
-| Risk Engine | 245 | 8 | 92% |
-| Feed Handler | 198 | 9 | 91% |
-| Venue Connectors | 176 | 11 | 89% |
-| Core Infrastructure | 154 | 10 | 93% |
-| Security | 132 | 8 | 95% |
-| API Gateway | 118 | 7 | 90% |
-| Deployment | 89 | 6 | 88% |
-| Integration | 78 | 5 | 87% |
-| Performance | 52 | 4 | 85% |
-| E2E | 20 | 2 | 82% |
-| **Total** | **2,251** | **48** | **91%** |
+Counts are `pytest --collect-only` verified — this is the number the suite actually
+collects and runs. (A further 5 files / 185 tests written against modules that do not
+exist in this repo are quarantined under `tests/_unimplemented/`; see the README there.)
+
+| Module | Tests | Files |
+|--------|-------|-------|
+| Order Book | 543 | 4 |
+| FIX Protocol | 411 | 8 |
+| Core Infrastructure | 254 | 4 |
+| Venue Connectors | 189 | 3 |
+| Risk Engine | 183 | 5 |
+| Feed Handler | 159 | 5 |
+| Performance | 92 | 3 |
+| Security | 85 | 3 |
+| Deployment | 70 | 3 |
+| API Gateway | 57 | 1 |
+| Integration | 22 | 1 |
+| **Total** | **2,065** | **40** |
 
 ### Test Execution
 
