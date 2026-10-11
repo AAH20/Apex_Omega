@@ -528,7 +528,7 @@ flowchart LR
 
     subgraph CI["Continuous Integration"]
         BUILD[Build]
-        TEST[Run Tests\n1,861 tests]
+        TEST[Run Tests\n2,251 tests]
         LINT[Lint & Static Analysis]
         SCAN[Security Scan]
     end
@@ -653,7 +653,7 @@ flowchart TD
 
 ## Tests
 
-**1,861 tests** across **97 files** in **12 topics**, TDD-enforced.
+**2,251 tests** across **48 files** in **12 topics**, TDD-enforced.
 
 ### Test Coverage by Module
 
@@ -671,7 +671,7 @@ flowchart TD
 | Integration | 78 | 5 | 87% |
 | Performance | 52 | 4 | 85% |
 | E2E | 20 | 2 | 82% |
-| **Total** | **1,861** | **97** | **91%** |
+| **Total** | **2,251** | **48** | **91%** |
 
 ### Test Execution
 
